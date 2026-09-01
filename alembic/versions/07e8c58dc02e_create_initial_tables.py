@@ -66,7 +66,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_bookings_date'), 'bookings', ['date'], unique=False)
     op.create_index('ix_bookings_type_status', 'bookings', ['type', 'status'], unique=False)
     op.create_index(op.f('ix_bookings_user_id'), 'bookings', ['user_id'], unique=False)
-    op.drop_table('client')
+    op.execute('DROP TABLE IF EXISTS client')
     # ### end Alembic commands ###
 
 
