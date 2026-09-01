@@ -5,6 +5,7 @@ from sqlalchemy import pool
 
 from alembic import context
 
+from app.config import get_settings
 from app.database import Base
 from app import models  # noqa: F401
 
@@ -16,6 +17,11 @@ config = context.config
 # This line sets up loggers basically.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+# Use the DATABASE_URL from app.config (.env) so Alembic targets the same
+# database as the running application, falling back to the ini file if unset.
+settings = get_settings()
+config.set_main_option("sqlalchemy.url", settings.database_url)
 
 # add your model's MetaData object here
 # for 'autogenerate' support
