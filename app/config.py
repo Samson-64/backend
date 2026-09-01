@@ -11,6 +11,15 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
 
+    @property
+    def database_url(self) -> str:
+        # Clever Cloud injects DATABASE_URL with a bare "mysql://" scheme.
+        # SQLAlchemy needs an explicit driver, and pymysql is the installed one.
+        url = self.DATABASE_URL
+        if url.startswith("mysql://"):
+            return url.replace("mysql://", "mysql+pymysql://", 1)
+        return url
+
 
 @lru_cache
 def get_settings() -> Settings:
