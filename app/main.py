@@ -6,7 +6,7 @@ app = FastAPI(title="Booking API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://0.0.0.0:3000", "https://lphnmbg1-3000.uks1.devtunnels.ms"],
+    allow_origins=["https://lphnmbg1-3000.uks1.devtunnels.ms"], # "http://localhost:3000", "http://0.0.0.0:3000",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
