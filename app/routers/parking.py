@@ -50,6 +50,7 @@ def _annotate_availability(spaces: list[ParkingSpaceResponse], parking_spaces: l
 def list_parking_spaces(
     date: str | None = None,
     db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
     parking_spaces = db.query(ParkingSpace).all()
     spaces = [ParkingSpaceResponse.model_validate(ps) for ps in parking_spaces]
@@ -62,6 +63,7 @@ def get_space_availability(
     space_id: str,
     date: str,
     db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
     space = db.query(ParkingSpace).filter(ParkingSpace.id == space_id).first()
     if not space:
