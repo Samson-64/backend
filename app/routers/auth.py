@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from app.dependencies import get_db, get_current_user
 from app.models.user import User, UserRole
@@ -9,14 +9,25 @@ from app.schemas.auth import (
     UserLogin,
     UserResponse,
     Token,
+    RefreshTokenRequest,
 )
-from app.services.auth_service import hash_password, verify_password, create_access_token
+from app.services.auth_service import (
+    hash_password,
+    verify_password,
+    create_access_token,
+    create_refresh_token,
+    verify_refresh_token,
+    revoke_refresh_token,
+    revoke_all_user_tokens,
+)
+from app.rate_limit import limiter
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/register", response_model=Token)
-def register(data: UserRegister, db: Session = Depends(get_db)):
+@limiter.limit("3/minute")
+def register(request: Request, data: UserRegister, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == data.email).first()
     if existing:
         raise HTTPException(
@@ -33,16 +44,19 @@ def register(data: UserRegister, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
 
-    token = create_access_token(user.id)
+    access_token = create_access_token(user.id)
+    refresh_token = create_refresh_token(user.id, db)
     return Token(
-        access_token=token,
+        access_token=access_token,
+        refresh_token=refresh_token,
         token_type="bearer",
         user=UserResponse.model_validate(user),
     )
 
 
 @router.post("/register-specialist", response_model=Token)
-def register_specialist(data: SpecialistRegister, db: Session = Depends(get_db)):
+@limiter.limit("3/minute")
+def register_specialist(request: Request, data: SpecialistRegister, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == data.email).first()
     if existing:
         raise HTTPException(
@@ -65,16 +79,19 @@ def register_specialist(data: SpecialistRegister, db: Session = Depends(get_db))
     db.commit()
     db.refresh(user)
 
-    token = create_access_token(user.id)
+    access_token = create_access_token(user.id)
+    refresh_token = create_refresh_token(user.id, db)
     return Token(
-        access_token=token,
+        access_token=access_token,
+        refresh_token=refresh_token,
         token_type="bearer",
         user=UserResponse.model_validate(user),
     )
 
 
 @router.post("/login", response_model=Token)
-def login(data: UserLogin, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def login(request: Request, data: UserLogin, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == data.email).first()
     if not user or not verify_password(data.password, user.hashed_password):
         raise HTTPException(
@@ -82,12 +99,55 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
             detail="Invalid email or password",
         )
 
-    token = create_access_token(user.id)
+    access_token = create_access_token(user.id)
+    refresh_token = create_refresh_token(user.id, db)
     return Token(
-        access_token=token,
+        access_token=access_token,
+        refresh_token=refresh_token,
         token_type="bearer",
         user=UserResponse.model_validate(user),
     )
+
+
+@router.post("/refresh", response_model=Token)
+@limiter.limit("10/minute")
+def refresh_token(request: Request, data: RefreshTokenRequest, db: Session = Depends(get_db)):
+    user_id = verify_refresh_token(data.refresh_token, db)
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+
+    revoke_refresh_token(data.refresh_token, db)
+
+    access_token = create_access_token(user.id)
+    refresh_token = create_refresh_token(user.id, db)
+    return Token(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        token_type="bearer",
+        user=UserResponse.model_validate(user),
+    )
+
+
+@router.post("/logout")
+def logout(data: RefreshTokenRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    revoke_refresh_token(data.refresh_token, db)
+    return {"detail": "Logged out successfully"}
+
+
+@router.post("/logout-all")
+def logout_all(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    revoke_all_user_tokens(user.id, db)
+    return {"detail": "All sessions revoked"}
 
 
 @router.get("/me", response_model=UserResponse)
