@@ -50,6 +50,7 @@ def appointment_availability(
     person_id: str,
     date: str,
     db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
     person = db.query(Person).filter(Person.id == person_id).first()
     if not person:
