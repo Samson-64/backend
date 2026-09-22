@@ -21,6 +21,7 @@ from app.services.booking_service import (
     check_slot_conflict,
     create_booking,
 )
+from app.realtime import notify_booking_changed
 from app.models.parking_space import ParkingSpace
 from app.dependencies import require_staff
 
@@ -99,6 +100,7 @@ def book_appointment(
         end=end,
         person_id=data.personId,
     )
+    notify_booking_changed(db, booking, user.id)
 
     return BookingResponse(
         id=booking.id,
@@ -178,4 +180,5 @@ def update_booking_status(
     booking.status = new_status
     db.commit()
     db.refresh(booking)
+    notify_booking_changed(db, booking, user.id)
     return _format_booking(booking)
