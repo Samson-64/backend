@@ -10,6 +10,7 @@ from app.services.booking_service import (
     update_specialist_booking_status,
     format_time,
 )
+from app.realtime import notify_booking_changed
 
 router = APIRouter(prefix="/api/specialist", tags=["specialist"])
 
@@ -72,4 +73,5 @@ def update_booking_status(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Appointment not found or not assigned to you",
         )
+    notify_booking_changed(db, booking, user.id)
     return _format_booking(booking)
