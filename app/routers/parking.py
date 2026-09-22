@@ -17,6 +17,7 @@ from app.services.booking_service import (
     check_slot_conflict,
     create_booking,
 )
+from app.realtime import notify_booking_changed
 
 router = APIRouter(prefix="/api/parking", tags=["parking"])
 
@@ -102,6 +103,7 @@ def book_parking(
         end=end,
         parking_space_id=data.parkingSpaceId,
     )
+    notify_booking_changed(db, booking, user.id)
 
     return BookingResponse(
         id=booking.id,
