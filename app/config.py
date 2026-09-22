@@ -14,7 +14,7 @@ class Settings(BaseSettings):
         "http://localhost:3000,http://0.0.0.0:3000,"
         "https://lphnmbg1-3000.uks1.devtunnels.ms"
     )
-    CORS_ALLOW_ORIGIN_REGEX: str = r"http://(localhost|127\.0\.0\.1)(:\d+)?"
+    CORS_ALLOW_ORIGIN_REGEX: str = r"http://(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?"
 
     class Config:
         env_file = ".env"
