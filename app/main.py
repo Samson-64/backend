@@ -1,4 +1,7 @@
+import asyncio
 import logging
+from contextlib import asynccontextmanager
+
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from fastapi import FastAPI, Request
@@ -9,21 +12,32 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 
-from app.routers import auth, people, parking, bookings, specialist
+from app.routers import auth, people, parking, bookings, specialist, realtime
+from app.realtime import set_main_loop
 from app.rate_limit import limiter
+from app.config import get_settings
 
 logger = logging.getLogger("uvicorn.error")
+settings = get_settings()
 
-app = FastAPI(title="Booking API", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Capture the event loop so sync router handlers can schedule
+    # realtime WebSocket broadcasts onto it (app/realtime.py).
+    set_main_loop(asyncio.get_running_loop())
+    yield
+
+
+app = FastAPI(title="Booking API", version="1.0.0", lifespan=lifespan)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://0.0.0.0:3000",
-                   "https://lphnmbg1-3000.uks1.devtunnels.ms"],
-    allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_origins=settings.cors_origins,
+    allow_origin_regex=settings.CORS_ALLOW_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -70,6 +84,7 @@ app.include_router(people.router)
 app.include_router(parking.router)
 app.include_router(bookings.router)
 app.include_router(specialist.router)
+app.include_router(realtime.router)
 
 
 @app.get("/api/health")
