@@ -106,3 +106,38 @@ def notify_booking_changed(db: Session, booking: Booking, actor_user_id: str) ->
         asyncio.run_coroutine_threadsafe(realtime.broadcast_to_users(ids, payload), loop)
     except RuntimeError:
         logger.exception("realtime: could not schedule broadcast for %s", booking.id)
+
+
+def notify_notification_created(notification) -> None:
+    """Schedule a ``notification`` push carrying the new row to its owner.
+
+    Unlike ``booking_changed`` this sends the full notification rather than an
+    invalidate signal: a live bell badge needs the title and the new unread
+    count, and the payload is small.
+    """
+    payload = {
+        "type": "notification",
+        "notification": {
+            "id": notification.id,
+            "category": notification.category.value,
+            "title": notification.title,
+            "body": notification.body,
+            "bookingId": notification.booking_id,
+            "read": False,
+            "readAt": None,
+            "createdAt": notification.created_at.isoformat()
+            if notification.created_at
+            else None,
+        },
+    }
+
+    loop = _main_loop
+    if loop is None or loop.is_closed():
+        # No live loop (e.g. tests without lifespan): push is best-effort only.
+        return
+    try:
+        asyncio.run_coroutine_threadsafe(
+            realtime.send_to_user(notification.user_id, payload), loop
+        )
+    except RuntimeError:
+        logger.exception("realtime: could not schedule notification push for %s", notification.id)

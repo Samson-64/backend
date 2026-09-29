@@ -11,6 +11,7 @@ from app.services.booking_service import (
     format_time,
 )
 from app.realtime import notify_booking_changed
+from app.services.notification_service import notify_booking_status_changed
 
 router = APIRouter(prefix="/api/specialist", tags=["specialist"])
 
@@ -74,4 +75,5 @@ def update_booking_status(
             detail="Appointment not found or not assigned to you",
         )
     notify_booking_changed(db, booking, user.id)
+    notify_booking_status_changed(db, booking, user.id)
     return _format_booking(booking)

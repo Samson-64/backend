@@ -32,6 +32,10 @@ class User(Base):
     updated_at: Mapped[str] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
+    # Access tokens do not expire (see ACCESS_TOKEN_EXPIRE_MINUTES), so logout
+    # records a cutoff here instead. Any token issued before this instant is
+    # rejected, which is what actually ends a session server-side.
+    tokens_valid_after: Mapped[str | None] = mapped_column(DateTime, nullable=True)
 
     bookings = relationship("Booking", back_populates="user")
     person = relationship("Person", back_populates="users")

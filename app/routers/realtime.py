@@ -3,7 +3,9 @@ import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.realtime import realtime
-from app.services.auth_service import decode_access_token
+from app.services.auth_service import decode_access_token_claims, is_token_revoked
+from app.database import SessionLocal
+from app.models.user import User
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -15,9 +17,38 @@ router = APIRouter()
 WS_INVALID_TOKEN = 1008
 
 
+def _authenticate_socket(token: str) -> str | None:
+    """Resolve a query-string token to a user id, honouring logout.
+
+    Access tokens no longer expire, so the signature check alone would let a
+    signed-out client reconnect forever. The revocation cutoff is checked here
+    too; the handshake is infrequent enough that a short-lived session is fine.
+    """
+    if not token:
+        return None
+    claims = decode_access_token_claims(token)
+    if claims is None:
+        return None
+    user_id = claims.get("sub")
+    if not user_id:
+        return None
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if user is None or is_token_revoked(user, claims):
+            return None
+        return user_id
+    except Exception:
+        logger.exception("realtime: token check failed for user %s", user_id)
+        return None
+    finally:
+        db.close()
+
+
 @router.websocket("/api/ws")
 async def websocket_endpoint(websocket: WebSocket, token: str = ""):
-    user_id = decode_access_token(token) if token else None
+    user_id = _authenticate_socket(token)
     if user_id is None:
         logger.warning("realtime: rejected WebSocket with invalid token")
         await websocket.close(code=WS_INVALID_TOKEN)

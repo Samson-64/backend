@@ -19,6 +19,7 @@ from app.services.auth_service import (
     verify_refresh_token,
     revoke_refresh_token,
     revoke_all_user_tokens,
+    revoke_user_access_tokens,
 )
 from app.rate_limit import limiter
 
@@ -141,12 +142,16 @@ def refresh_token(request: Request, data: RefreshTokenRequest, db: Session = Dep
 @router.post("/logout")
 def logout(data: RefreshTokenRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     revoke_refresh_token(data.refresh_token, db)
+    # Access tokens never expire, so this cutoff is what actually ends the
+    # session; revoking the refresh token alone would not.
+    revoke_user_access_tokens(user, db)
     return {"detail": "Logged out successfully"}
 
 
 @router.post("/logout-all")
 def logout_all(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     revoke_all_user_tokens(user.id, db)
+    revoke_user_access_tokens(user, db)
     return {"detail": "All sessions revoked"}
 
 

@@ -13,9 +13,12 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 
 from app.routers import auth, people, parking, bookings, specialist, realtime
+from app.routers import settings as settings_router
+from app.routers import notifications as notifications_router
 from app.realtime import set_main_loop
 from app.rate_limit import limiter
 from app.config import get_settings
+from app.services.reminder_scheduler import run_reminder_scheduler
 
 logger = logging.getLogger("uvicorn.error")
 settings = get_settings()
@@ -25,8 +28,24 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     # Capture the event loop so sync router handlers can schedule
     # realtime WebSocket broadcasts onto it (app/realtime.py).
-    set_main_loop(asyncio.get_running_loop())
-    yield
+    loop = asyncio.get_running_loop()
+    set_main_loop(loop)
+
+    # Background reminder ticker. Off in tests: TestClient runs the lifespan,
+    # and a live ticker would query the test database from another thread.
+    reminder_task = None
+    if settings.REMINDER_SCHEDULER_ENABLED:
+        reminder_task = loop.create_task(run_reminder_scheduler())
+
+    try:
+        yield
+    finally:
+        if reminder_task is not None:
+            reminder_task.cancel()
+            try:
+                await reminder_task
+            except asyncio.CancelledError:
+                pass
 
 
 app = FastAPI(title="Booking API", version="1.0.0", lifespan=lifespan)
@@ -85,6 +104,8 @@ app.include_router(parking.router)
 app.include_router(bookings.router)
 app.include_router(specialist.router)
 app.include_router(realtime.router)
+app.include_router(settings_router.router)
+app.include_router(notifications_router.router)
 
 
 @app.get("/api/health")
